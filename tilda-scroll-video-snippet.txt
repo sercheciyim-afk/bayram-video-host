@@ -1,0 +1,169 @@
+<script>
+(function () {
+  var desktopSrc = "https://dl.dropbox.com/scl/fi/5k6pfgx6th0op6rhdqbru/bayram-desktop-hq.mp4?rlkey=62rr9e0o043qk8rg1jer65kw4&st=nkxdnid6&raw=1";
+  var mobileSrc = "https://dl.dropbox.com/scl/fi/f4u2cldm0wo5e9zsm6kwz/bayram-mobile-hq.mp4?rlkey=7j7j48t9ixa18hc81f8kho0ml&st=f0kncbzr&raw=1";
+  var blockId = "bayram-scroll-video-" + Math.random().toString(36).slice(2);
+  var script = document.currentScript;
+
+  function addStyles() {
+    if (document.getElementById("bayram-scroll-video-styles")) return;
+
+    var style = document.createElement("style");
+    style.id = "bayram-scroll-video-styles";
+    style.textContent =
+      ".bayram-scroll-video{position:relative;height:200vh;min-height:1080px;background:#bde8ff;margin:0;padding:0;}" +
+      ".bayram-scroll-video__stage{position:sticky;top:0;width:100%;height:100vh;overflow:hidden;background:#bde8ff;}" +
+      ".bayram-scroll-video__media{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}" +
+      ".bayram-scroll-video__media--mobile{display:none;}" +
+      "@media(max-width:760px){" +
+      ".bayram-scroll-video{height:185vh;min-height:980px;}" +
+      ".bayram-scroll-video__media--desktop{display:none;}" +
+      ".bayram-scroll-video__media--mobile{display:block;}" +
+      "}";
+
+    document.head.appendChild(style);
+  }
+
+  function createVideo(className, src) {
+    var video = document.createElement("video");
+    video.className = className;
+    video.muted = true;
+    video.defaultMuted = true;
+    video.playsInline = true;
+    video.autoplay = true;
+    video.loop = true;
+    video.preload = "auto";
+    video.setAttribute("muted", "");
+    video.setAttribute("playsinline", "");
+    video.setAttribute("webkit-playsinline", "");
+    video.setAttribute("aria-hidden", "true");
+
+    var source = document.createElement("source");
+    source.src = src;
+    source.type = "video/mp4";
+    video.appendChild(source);
+
+    return video;
+  }
+
+  function insertBlock() {
+    addStyles();
+
+    var block = document.createElement("section");
+    var stage = document.createElement("div");
+    var desktopVideo = createVideo("bayram-scroll-video__media bayram-scroll-video__media--desktop", desktopSrc);
+    var mobileVideo = createVideo("bayram-scroll-video__media bayram-scroll-video__media--mobile", mobileSrc);
+
+    block.id = blockId;
+    block.className = "bayram-scroll-video";
+    block.setAttribute("data-bayram-scroll-video", "");
+    stage.className = "bayram-scroll-video__stage";
+
+    stage.appendChild(desktopVideo);
+    stage.appendChild(mobileVideo);
+    block.appendChild(stage);
+
+    if (script && script.parentNode) {
+      script.parentNode.insertBefore(block, script);
+    } else {
+      document.body.appendChild(block);
+    }
+
+    initScrollVideo(block, desktopVideo, mobileVideo);
+  }
+
+  function initScrollVideo(block, desktopVideo, mobileVideo) {
+    var mobileQuery = window.matchMedia("(max-width: 760px)");
+    var activeVideo = null;
+    var ticking = false;
+
+    function clamp(value, min, max) {
+      return Math.min(Math.max(value, min), max);
+    }
+
+    function getActiveVideo() {
+      return mobileQuery.matches ? mobileVideo : desktopVideo;
+    }
+
+    function updateFrame() {
+      ticking = false;
+
+      if (!activeVideo || !Number.isFinite(activeVideo.duration)) return;
+
+      var rect = block.getBoundingClientRect();
+      var scrollableDistance = Math.max(1, block.offsetHeight - window.innerHeight);
+      var progress = clamp(-rect.top / scrollableDistance, 0, 1);
+      var targetTime = progress * activeVideo.duration;
+
+      if (Math.abs(activeVideo.currentTime - targetTime) > 0.025) {
+        try {
+          activeVideo.currentTime = targetTime;
+        } catch (error) {}
+      }
+    }
+
+    function requestFrame() {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(updateFrame);
+    }
+
+    function wakeVideo(video) {
+      if (!video) return;
+
+      video.muted = true;
+      video.defaultMuted = true;
+      video.playsInline = true;
+      video.load();
+
+      var playPromise = video.play();
+
+      if (playPromise && typeof playPromise.then === "function") {
+        playPromise.then(function () {
+          video.pause();
+          requestFrame();
+        }).catch(function () {
+          requestFrame();
+        });
+      } else {
+        video.pause();
+        requestFrame();
+      }
+    }
+
+    function setActiveVideo() {
+      var nextVideo = getActiveVideo();
+
+      if (activeVideo === nextVideo) return;
+      if (activeVideo) activeVideo.pause();
+
+      activeVideo = nextVideo;
+      wakeVideo(activeVideo);
+      requestFrame();
+    }
+
+    function unlock() {
+      wakeVideo(activeVideo);
+    }
+
+    desktopVideo.addEventListener("loadedmetadata", requestFrame);
+    mobileVideo.addEventListener("loadedmetadata", requestFrame);
+    desktopVideo.addEventListener("canplay", requestFrame);
+    mobileVideo.addEventListener("canplay", requestFrame);
+
+    setActiveVideo();
+    mobileQuery.addEventListener("change", setActiveVideo);
+    window.addEventListener("scroll", requestFrame, { passive: true });
+    window.addEventListener("resize", requestFrame);
+    window.addEventListener("load", requestFrame);
+    window.addEventListener("touchstart", unlock, { passive: true });
+    window.addEventListener("pointerdown", unlock, { passive: true });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", insertBlock);
+  } else {
+    insertBlock();
+  }
+})();
+</script>
